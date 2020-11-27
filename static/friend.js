@@ -73,9 +73,12 @@ function Game(character,token){
     }
 
     this.play = function(socket,e){   
-        e.target.innerText = self.character;
-        socket.send(JSON.stringify({"type":"game","coordinates":self.coordinates[e.target.getAttribute("id")]}))
-        self.turn = false;        
+        if(self.is_start){
+            e.target.innerText = self.character;
+            socket.send(JSON.stringify({"type":"game","coordinates":self.coordinates[e.target.getAttribute("id")]}))
+            self.turn = false;
+            bildirim("Arkadaşın oynuyor...");
+        }
     }
     
     this.reload = function(){
@@ -221,7 +224,6 @@ window.onload = function(){
         if(game.start && game.turn){
             if(e.target.innerText == "-"){
                 game.play(baglanti,e);
-                bildirim("Arkadaşın oynuyor...");
             }
         }
     }; 
