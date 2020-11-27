@@ -1,0 +1,52 @@
+{%extends 'base.html'%}
+{%load static%}
+
+{%block title%}Friend{%endblock%}
+
+{%block body%}
+<div class="kart">
+    {% if invite %}
+        <p id="bilgi">Davet linki ile katıldınız</p>
+    {% else %}
+        <p id="bilgi">Davet linkiniz: <a id="kopyala" href="#">{{davet_link}}</a></p>
+    {% endif %}
+    <span style="display: none;" id="davet_kodu" name="{{davet_kodu}}"></span>
+    <span style="display: none;" id="davet_link" name="{{davet_link}}"></span>
+    <span style="display: none;" id="invite" name="{{invite}}"></span>
+
+    <table id="friend_tablo" border="1">
+        <tr>
+            <td id="score" colspan="4">Sen: 0 - Arkadaşın: 0</span></td>
+        </tr> 
+        <tr>
+            <td id="cell_1" class="cell">-</td>
+            <td id="cell_2" class="cell">-</td>
+            <td id="cell_3" class="cell">-</td>
+            <td id="mesaj" rowspan="3">
+                <div id="mesajlasma">
+                    <textarea id="mesaj_kutusu"></textarea>
+                    <div>
+                        <input type="text" id="mesaj_girdisi" class="w-75"><button onclick="send_message(null);" class="btn btn-primary w-25"><i class="fas fa-paper-plane"></i></button>
+                    </div>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <td id="cell_4" class="cell">-</td>
+            <td id="cell_5" class="cell">-</td>
+            <td id="cell_6" class="cell">-</td>
+        </tr>
+        <tr>
+            <td id="cell_7" class="cell">-</td>
+            <td id="cell_8" class="cell">-</td>
+            <td id="cell_9" class="cell">-</td>
+        </tr>
+    </table>
+</div>
+<div style="position: absolute; bottom:0px; right: 5px;">
+    <div class="alert alert-primary collapse" id = "notify" role="alert">
+        Panoya kopyalandı
+    </div>
+</div>
+<script src="{% static 'friend.js' %}"></script>
+{%endblock%}

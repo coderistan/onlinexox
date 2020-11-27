@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Computer{% endblock %}
+
+{% block body %}
+
+<div class="kart">
+    <p id="bildirim">Bilgisayar: X Sen: O</p>
+    <table border=1 id="tablo">
+        <tr>
+            <td x="0" y="0">-</td>
+            <td x="0" y="1">-</td>
+            <td x="0" y="2">-</td>
+        </tr>
+        <tr>
+            <td x="1" y="0">-</td>
+            <td x="1" y="1">-</td>
+            <td x="1" y="2">-</td>
+        </tr>
+        <tr>
+            <td x="2" y="0">-</td>
+            <td x="2" y="1">-</td>
+            <td x="2" y="2">-</td>
+        </tr>
+    </table>
+    <button id="buton" onclick="restart();" class="btn btn-primary">Tekrar</button>
+</div>
+<script>
+    var wait = false;
+    var finish = false;
+
+    function restart(e){
+        if(finish == false){
+            return;
+        }
+
+        finish = false;
+        wait = false;
+        reload_table([["-","-","-"],["-","-","-"],["-","-","-"]]);
+        bildirim("Sıra Sende!");
+    }
+
+    function bildirim(mesaj){
+        document.getElementById("bildirim").innerText = mesaj;
+    }
+
+    function reload_table(board){
+        let tablo = document.getElementById("tablo");
+        let html = "";
+        for(let i=0;i<board.length;i++){
+            html += "<tr>";
+            for(let k=0;k<board[i].length;k++){
+                html += "<td x='"+i+"' y='"+k+"'>" + board[i][k] + "</td>";
+            }
+            html += "</tr>";
+        }
+        tablo.innerHTML = html;
+    }
+    window.onload = function(){
+        const connect = new WebSocket("ws://"+window.location.host+"/xoxcomputer/");
+        connect.onmessage = function(e){
+            let data = JSON.parse(e.data);
+            if(data.finish){
+                reload_table(data.board);
+                finish = true;
+                bildirim("Oyun bitti. Kazanan: "+data.winner);         
+            }else{
+                bildirim("Sıra Sende!");
+                reload_table(data.board);
+            }
+            wait = false;
+        }
+        connect.onclose = function(e){
+            console.log("Bağlantı koptu");
+        }
+
+        var tablo = document.getElementById("tablo");
+        tablo.onclick = function(e){
+            if(e.target.innerText != "-" || finish || wait){
+                return;
+            }else{
+                wait = true;
+                e.target.innerText = "o";
+                connect.send(JSON.stringify({"x":e.target.getAttribute("x"),"y":e.target.getAttribute("y")}));
+                bildirim("Bilgisayar oynuyor...");
+            }
+        }
+    }
+</script>
+{% endblock %}
