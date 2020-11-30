@@ -37,7 +37,7 @@ class ComputerConsumer(WebsocketConsumer):
             result = {"board":self.game.board,"finish":False}
             self.send(text_data=json.dumps(result))
         else:
-            print("Hatalı hamle")            
+            print("Hatalı hamle")        
 
 class FriendConsumer(WebsocketConsumer):
     info = {}
@@ -46,6 +46,7 @@ class FriendConsumer(WebsocketConsumer):
     BOARD_INFO = 3
 
     def connect(self):
+        self.turn = False
         self.connection = False
         self.accept()
 
@@ -72,38 +73,47 @@ class FriendConsumer(WebsocketConsumer):
                 else:
                     # Davetli oyundan ayrılırsa oyun bilgileri sıfırlanır
                     # ve aynı davet bağlantısından tekrar bağlanması beklenilir
-
-                    del info["player_2"]
-                    
-                    info.get("game").clear()
                     info.get("player_1").connection = False
                     info.get("player_1").send(json.dumps({
                             "type":"game",
                             "message":"Davetli oyundan ayrıldı. Aynı linki kullanarak tekrar bağlanabilir",
-                            "code":FriendConsumer.BROKEN_GAME
+                            "code":FriendConsumer.BROKEN_GAME,
                             }))
+                    del info["player_2"]
 
     def play_game(self,data):
-        if self.connection:
-            game = FriendConsumer.info.get(self.code).get("game")
+        if self.connection and self.turn:
+            info = FriendConsumer.info.get(self.code)
+            game = info.get("game")
             x = data["coordinates"]["x"]
             y = data["coordinates"]["y"]
             game.play(x,y,self.player)
 
+            # Sıra değiştiriliyor
+            self.turn = False
+            self.get_opponent().turn = True
+            
             winner = game.is_finish()
             if winner:
+                if winner == self.player:
+                    info.get("score")[self.player] = info.get("score")[self.player] + 1
+                else:
+                    opponet_player = self.get_opponent()
+                    info.get("score")[opponet_player.player] = info.get("score")[opponet_player.player] + 1
+
                 # tüm oyunculara oyunun bittiğini bildir
-                result = json.dumps({"type":"game","code":FriendConsumer.BOARD_INFO,"board":game.board,"is_finish":True,"winner":winner})
-                game.clear()
-                self.send(result)
+                result = {"code":FriendConsumer.BOARD_INFO,"is_finish":True,"winner":winner}
+                self.send_game(result)
+                self.get_opponent().send_game(result)
+                game.clear() # tahta temizlenmeden önce tahtanın durumu gönderilmelidir
 
             else:
-                result = json.dumps({"type":"game","code":FriendConsumer.BOARD_INFO,"board":game.board,"is_finish":False})                
-            
-            self.get_opponent().send(result)
+                result = {"code":FriendConsumer.BOARD_INFO,"is_finish":False}
+                self.get_opponent().send_game(result)
 
     def get_opponent(self):
-        # Oyuncu için karşı oyuncu nesnesini elde etme
+        # Oyuncu için, karşı oyuncu nesnesini elde etme
+
         if self.connection:
             if self.player == minmax.Game.player_1:
                 return FriendConsumer.info.get(self.code).get("player_2")
@@ -132,13 +142,17 @@ class FriendConsumer(WebsocketConsumer):
 
     def start_game(self,code):
         info = FriendConsumer.info.get(self.code)
+
         info.get("player_1").connection = True
-        info.get("player_1").send(json.dumps({"type":"game","message":"Oyun başladı. Hadi sıra sende!","code":FriendConsumer.START_GAME,"turn":True}))
+        info.get("player_1").send_game({"message":"Oyun başladı. Hadi sıra sende!","code":FriendConsumer.START_GAME})
+
         info.get("player_2").connection = True
-        info.get("player_2").send(json.dumps({"type":"game","message":"Bağlantı kuruldu. Arkadaşın oynuyor","code":FriendConsumer.START_GAME,"turn":False}))
+        info.get("player_2").turn = not info.get("player_1").turn
+        info.get("player_2").send_game({"message":"Oyun başladı. Hadi sıra sende!","code":FriendConsumer.START_GAME})
 
     def create_game(self,data):
         if FriendConsumer.info.get(data["code"],False):
+            
             if not data["invite"]:
                 # Oyun var, eğer gelen davetli değilse red mesajı yollanacak
                 self.send(json.dumps({"type":"connect","status":False}))
@@ -168,10 +182,12 @@ class FriendConsumer(WebsocketConsumer):
                 # Oyun oluşturma
                 self.player = minmax.Game.player_1
                 self.code = data["code"]
+                self.turn = True
             
                 FriendConsumer.info[self.code] = {
                     "player_1":self,
                     "game":minmax.Game(),
+                    "score":{"x":0,"o":0},
                 }
             
     def receive(self, text_data):
@@ -179,3 +195,14 @@ class FriendConsumer(WebsocketConsumer):
 
         message_type = self.get_message_type(data)
         message_type(data)
+
+    def send_game(self,data):
+        # Burada amaç, oyuna dair tam bilgileri oyunculara göndermektir
+        # oyuncunun sırası, tahtanın durumu vs
+        data["type"] = "game"
+        data["turn"] = self.turn
+        data["board"] = FriendConsumer.info.get(self.code).get("game").board
+        data["self_score"] = FriendConsumer.info.get(self.code).get("score")[self.player]
+        data["oppo_score"] = FriendConsumer.info.get(self.code).get("score")[self.get_opponent().player]
+        self.send(json.dumps(data))
+        

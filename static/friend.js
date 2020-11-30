@@ -1,3 +1,11 @@
+const START_GAME = 1;
+const BROKEN_GAME = 2;
+const BOARD_INFO = 3;
+var baglanti = null;
+var is_invite = null;
+var token = null;
+var game = null;
+
 // https://techoverflow.net/2018/03/30/copying-strings-to-the-clipboard-using-pure-javascript/
 function copyStringToClipboard (str) {
     // Create new element
@@ -16,6 +24,7 @@ function copyStringToClipboard (str) {
     document.body.removeChild(el);
 }
 
+// ---------------> Game declaration
 function Game(character,token){
     this.score = 0;
     this.opponent_score = 0;
@@ -49,22 +58,22 @@ function Game(character,token){
         }
     }
 
-    this.start = function(turn){
-        self.turn = turn;
+    this.start = function(data){
         self.is_start = true;
         
+        if(data != undefined){
+            // Oyun ilk kez başlatılmış
+            self.turn = data.turn;
+            self.is_start = true;
+            self.fill_board(data.board);
+            self.reload_score(data);
+        }
+
         if(self.turn){
             bildirim("Sıra sende!");
         }else{
             bildirim("Arkadaşın oynuyor...");
         }
-    }
-
-    this.stop = function(){
-        self.is_start = false;
-        self.score = 0;
-        self.opponent_score = 0;
-        self.clear_board();
     }
 
     this.end_game = function(){
@@ -85,21 +94,29 @@ function Game(character,token){
         // bir oyun bittikten sonra tüm bilgiler sıfırlanır ve
         // sıraya göre yeniden oynanır
         self.clear_board();
-        FIRST_TURN = !FIRST_TURN
-        self.start(FIRST_TURN);
+        self.start();
     }
 
-    this.reload_score = function(winner){
-        if(winner == self.character){
-            self.score += 1;
-        }else if(winner == "-"){
-            bildirim("Kazanan yok");
-        }else{
-            self.opponent_score += 1;
+    this.reload_score = function(data){
+        $("#score").text("Sen: "+data.self_score+" - "+"Arkadaşın: "+data.oppo_score);
+    }
+
+    this.update = function(data,only_update){
+        // Gelen bilgiler ışığında bilgiler güncellenecek
+        self.turn = data.turn;
+        self.fill_board(data.board);
+        self.reload_score(data);
+
+        if(!only_update){
+            if(self.turn){
+                bildirim("Sıra sende!");
+            }else{
+                bildirim("Arkadaşın oynuyor...");
+            }
         }
-        $("#score").text("Sen: "+self.score+" - "+"Arkadaşın: "+self.opponent_score);
     }
 }
+// -----------> End Game
 
 function bildirim(mesaj){
     $("#bilgi").text(mesaj);
@@ -124,11 +141,18 @@ function send_message(message){
     document.getElementById("mesaj_girdisi").value = "";
 }
 
-const START_GAME = 1;
-const BROKEN_GAME = 2;
-const BOARD_INFO = 3;
-var FIRST_TURN = null; // değişimli olarak oyuna ilk başlayacak kişiyi belirleme
-var baglanti = new WebSocket("ws://"+window.location.host+"/xoxfriend/");
+function connect(){
+    baglanti = new WebSocket("ws://"+window.location.host+"/xoxfriend/");
+    baglanti.addEventListener("open",function(e){
+        baglanti.send(JSON.stringify(
+            {
+                "type":"connect",
+                "code":token,
+                "invite":is_invite,
+            }
+        ));
+    });
+}
 
 window.onload = function(){
     var invite = document.getElementById("kopyala");
@@ -142,22 +166,15 @@ window.onload = function(){
         }
     }
     
-    var is_invite = document.getElementById("invite").getAttribute("name")=="True"?true:false; // davet edilmiş mi
-    var token = document.getElementById("davet_kodu").getAttribute("name");
-    var game = new Game(is_invite?"o":"x",token);
+    is_invite = document.getElementById("invite").getAttribute("name")=="True"?true:false; // davet edilmiş mi
+    token = document.getElementById("davet_kodu").getAttribute("name");
+    game = new Game(is_invite?"o":"x",token);
+    connect();
 
-    baglanti.onopen = function(){
-        baglanti.send(JSON.stringify(
-            {
-                "type":"connect",
-                "code":token,
-                "invite":is_invite,
-            }
-        ));        
-    }
+    // Bağlantı durum tanımlamaları
     baglanti.onclose = function(){
         $("#bilgi").text("Bağlantı koptu");
-        game.stop();
+        game.end_game();
     }
 
     baglanti.onmessage = function(e){
@@ -182,27 +199,21 @@ window.onload = function(){
                 $("#bilgi").text(mesaj.message);
                 switch(mesaj.code){
                     case START_GAME:
-                        game.start(mesaj.turn);
-                        FIRST_TURN = mesaj.turn;
+                        game.start(mesaj);
                         break;
 
                     case BROKEN_GAME:
-                        game.stop();
+                        game.end_game();
                         break;
 
                     case BOARD_INFO:
                         if(mesaj.is_finish){
                             bildirim("Oyun bitti. Kazanan: "+mesaj.winner);
-                            game.fill_board(mesaj.board);
-                            game.reload_score(mesaj.winner);
-                            game.end_game();
-                            console.log(game.turn);
+                            game.update(mesaj,true);
                             setTimeout(game.reload,1000);
 
                         }else{
-                            game.fill_board(mesaj.board);
-                            game.turn = true;
-                            bildirim("Sıra sende!");
+                            game.update(mesaj);
                         }
                         
                         break;
@@ -213,6 +224,8 @@ window.onload = function(){
                 break;
         }
     }
+    // Bağlantı durum tanımlamaları sonu
+
 
     document.getElementById("mesaj_girdisi").addEventListener("keyup",function(event){
         if(event.keyCode == 13){
@@ -221,7 +234,7 @@ window.onload = function(){
     });
 
     document.getElementById("friend_tablo").onclick = function(e){
-        if(game.start && game.turn){
+        if(game.is_start && game.turn){
             if(e.target.innerText == "-"){
                 game.play(baglanti,e);
             }
