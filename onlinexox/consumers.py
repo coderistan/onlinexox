@@ -97,7 +97,7 @@ class FriendConsumer(WebsocketConsumer):
             if winner:
                 if winner == self.player:
                     info.get("score")[self.player] = info.get("score")[self.player] + 1
-                else:
+                elif winner == self.get_opponent().player:
                     opponet_player = self.get_opponent()
                     info.get("score")[opponet_player.player] = info.get("score")[opponet_player.player] + 1
 
